@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TollSkanner - Automatisk Tolldeklarasjon for Norge</title>
+  <style>
+    :root {
+      --primary: #1e40af;
+      --primary-light: #3b82f6;
+      --primary-dark: #1e3a8a;
+      --success: #059669;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --bg: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-dark: #0f172a;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+      background: var(--bg); 
+      color: var(--text); 
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+      color: white;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .logo { display: flex; align-items: center; gap: 0.75rem; }
+    .logo-icon {
+      width: 48px; height: 48px;
+      background: white;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+    }
+    .logo-text h1 { font-size: 1.25rem; font-weight: 700; }
+    .logo-text p { font-size: 0.75rem; opacity: 0.85; }
+    .badge {
+      background: rgba(255,255,255,0.2);
+      padding: 0.375rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .header-actions { display: flex; gap: 0.5rem; }
+    
+    .main { display: grid; grid-template-columns: 360px 1fr; min-height: calc(100vh - 80px); }
+    @media (max-width: 1000px) { .main { grid-template-columns: 1fr; } }
+    
+    .sidebar {
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+    .section { margin-bottom: 1.5rem; }
+    .section-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--primary-light);
+    }
+    
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      text-align: center;
+      background: #f1f5f9;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .upload-zone:hover { border-color: var(--primary-light); background: #e0e7ff; }
+    .upload-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    .upload-title { font-weight: 600; margin-bottom: 0.25rem; }
+    .upload-hint { font-size: 0.8rem; color: var(--text-muted); }
+    #fileInput { display: none; }
+    
+    .demo-btn {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: var(--success);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .demo-btn:hover { background: #047857; }
+    
+    .status-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+    }
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.4rem 0;
+      font-size: 0.8rem;
+    }
+    .status-item:not(:last-child) { border-bottom: 1px solid var(--border); }
+    .status-dot { 
+      width: 8px; height: 8px; 
+      border-radius: 50%; 
+      background: var(--success);
+      display: inline-block;
+      margin-right: 0.375rem;
+    }
+    
+    .content { padding: 1.5rem; overflow-y: auto; }
+    
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      background: white;
+      padding: 0.25rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 1.25rem;
+    }
+    .tab {
+      padding: 0.625rem 1rem;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .tab:hover { background: #f1f5f9; color: var(--text); }
+    .tab.active { background: var(--primary); color: white; }
+    
+    .panel {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .panel-header {
+      background: #f8fafc;
+      padding: 0.875rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-title { font-weight: 600; font-size: 0.9rem; }
+    .panel-badge {
+      background: #e0e7ff;
+      color: var(--primary);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      font-family: monospace;
+    }
+    .panel-content { padding: 1rem; }
+    
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 0.25rem; }
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+    .field-code {
+      font-family: monospace;
+      font-size: 0.6rem;
+      color: #94a3b8;
+      background: #f1f5f9;
+      padding: 0.1rem 0.3rem;
+      border-radius: 3px;
+    }
+    .form-input, .form-select {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: white;
+    }
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: var(--primary-light);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+    }
+    .form-input.filled { background: #ecfdf5; border-color: var(--success); }
+    
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .data-table th {
+      background: #f8fafc;
+      padding: 0.5rem;
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .data-table td { padding: 0.375rem; border-bottom: 1px solid var(--border); }
+    .data-table input {
+      width: 100%;
+      padding: 0.375rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+    
+    .btn {
+      padding: 0.625rem 1rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: white; color: var(--text); border: 1px solid var(--border); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+    .btn-sm { padding: 0.375rem 0.625rem; font-size: 0.75rem; }
+    
+    .export-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .export-option {
+      padding: 0.75rem;
+      background: #f8fafc;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .export-option:hover { border-color: var(--border); }
+    .export-option.selected { border-color: var(--primary); background: #eff6ff; }
+    .export-icon { font-size: 1.25rem; }
+    .export-label { font-weight: 600; font-size: 0.8rem; }
+    .export-desc { font-size: 0.65rem; color: var(--text-muted); }
+    
+    .export-preview {
+      background: var(--bg-dark);
+      border-radius: 8px;
+      padding: 1rem;
+      max-height: 280px;
+      overflow: auto;
+      margin-bottom: 1rem;
+    }
+    .export-preview pre {
+      font-family: 'Consolas', monospace;
+      font-size: 0.7rem;
+      color: #94a3b8;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin: 0;
+    }
+    
+    .info-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    .info-box h4 { font-size: 0.85rem; color: var(--primary); margin-bottom: 0.5rem; }
+    .info-box p, .info-box li { font-size: 0.75rem; color: var(--text-muted); }
+    .info-box ul { margin: 0.5rem 0 0 1rem; }
+    
+    .alert {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .alert-success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+    
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">📋</div>
+      <div class="logo-text">
+        <h1>TollSkanner</h1>
+        <p>Automatisk Tolldeklarasjon for TVINN</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="badge">🇳🇴 Norge</span>
+      <span class="badge">Digitoll 441002</span>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar">
+      <div class="section">
+        <div class="section-title">📄 Last opp dokument</div>
+        <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+          <div class="upload-icon">📄</div>
+          <div class="upload-title">Slipp dokumenter her</div>
+          <div class="upload-hint">eller klikk for å velge fil</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/*,.pdf" />
+        <button class="demo-btn" onclick="loadDemoData()">🎯 Last inn demodata</button>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">⚡ Systemstatus</div>
+        <div class="status-box">
+          <div class="status-item">
+            <span>TVINN Format</span>
+            <span><span class="status-dot"></span>CUSDEC</span>
+          </div>
+          <div class="status-item">
+            <span>Ekspedisjonsenhet</span>
+            <span>441002</span>
+          </div>
+          <div class="status-item">
+            <span>Status</span>
+            <span><span class="status-dot"></span>Klar</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="alert alert-info" id="welcomeAlert">
+        💡 <strong>Velkommen!</strong> Last opp en faktura eller klikk "Last inn demodata" for å teste systemet.
+      </div>
+      
+      <div class="tabs">
+        <button class="tab active" onclick="showTab('deklarasjon')">📋 Deklarasjon</button>
+        <button class="tab" onclick="showTab('varer')">📦 Varelinjer</button>
+        <button class="tab" onclick="showTab('eksport')">📤 Eksport</button>
+      </div>
+
+      <!-- Deklarasjon Tab -->
+      <div id="deklarasjonTab">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">📋 Hodedata</span>
+            <span class="panel-badge">Rubrikk 1-7</span>
+          </div>
+          <div class="panel-content">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label"><span>Deklarasjonskategori</span><span class="field-code">Rubr. 1</span></label>
+                <select class="form-select" id="kategori">
+                  <option value="">Velg...</option>
+                  <option value="IM-A">IM A - Ordinær innførsel</option>
+                  <option value="EU-A">EU A - Fra EU/EØS</option>
+                  <option value="EX-A">EX A - Ordinær utførsel</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Ekspedisjonsenhet</span><span class="field-code">Rubr. 29</span></label>
+                <input type="text" class="form-input" id="ekspedisjonsenhet" value="441002" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Deklarasjonsdato</span><span class="field-code">Rubr. 54</span></label>
+                <input type="date" class="form-input" id="deklarasjonsdato" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Antall kolli</span><span class="field-code">Rubr. 6</span></label>
+                <input type="number" class="form-input" id="antallKolli" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">👥 Parter</span>
+            <span class="panel-badge">Rubrikk 2, 8, 14</span>
+          </div>
+          <div class="panel-content">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label"><span>Avsender/Eksportør</span><span class="field-code">Rubr. 2</span></label>
+                <input type="text" class="form-input" id="avsender" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Avsenderland</span><span class="field-code">Rubr. 15a</span></label>
+                <select class="form-select" id="avsenderland">
+                  <option value="">Velg...</option>
+                  <option value="DE">Tyskland</option>
+                  <option value="CN">Kina</option>
+                  <option value="SE">Sverige</option>
+                  <option value="GB">Storbritannia</option>
+                  <option value="US">USA</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Mottaker/Importør</span><span class="field-code">Rubr. 8</span></label>
+                <input type="text" class="form-input" id="mottaker" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Mottakers org.nr</span><span class="field-code">Rubr. 8</span></label>
+                <input type="text" class="form-input" id="mottakerOrgnr" maxlength="9" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Tollrepresentant</span><span class="field-code">Rubr. 14</span></label>
+                <input type="text" class="form-input" id="tollrepresentant" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Tollrep. org.nr</span><span class="field-code">Rubr. 14</span></label>
+                <input type="text" class="form-input" id="tollrepOrgnr" maxlength="9" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">💰 Verdi og valuta</span>
+            <span class="panel-badge">Rubrikk 22-23</span>
+          </div>
+          <div class="panel-content">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label"><span>Fakturabeløp</span><span class="field-code">Rubr. 22</span></label>
+                <input type="number" step="0.01" class="form-input" id="fakturabelop" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Valuta</span><span class="field-code">Rubr. 22</span></label>
+                <select class="form-select" id="valuta">
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                  <option value="GBP">GBP</option>
+                  <option value="SEK">SEK</option>
+                  <option value="NOK">NOK</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Leveringsbetingelser</span><span class="field-code">Rubr. 20</span></label>
+                <select class="form-select" id="incoterms">
+                  <option value="">Velg Incoterms...</option>
+                  <option value="EXW">EXW</option>
+                  <option value="FCA">FCA</option>
+                  <option value="DAP">DAP</option>
+                  <option value="DDP">DDP</option>
+                  <option value="FOB">FOB</option>
+                  <option value="CIF">CIF</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Transportmåte</span><span class="field-code">Rubr. 25</span></label>
+                <select class="form-select" id="transportmate">
+                  <option value="">Velg...</option>
+                  <option value="1">1 - Sjø</option>
+                  <option value="2">2 - Jernbane</option>
+                  <option value="3">3 - Vei</option>
+                  <option value="4">4 - Luft</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">📑 Dokumenter</span>
+            <span class="panel-badge">Rubrikk 44</span>
+          </div>
+          <div class="panel-content">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label"><span>Fakturanummer</span><span class="field-code">N380</span></label>
+                <input type="text" class="form-input" id="fakturanummer" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Fakturadato</span><span class="field-code">DTM</span></label>
+                <input type="date" class="form-input" id="fakturadato" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Varer Tab -->
+      <div id="varerTab" class="hidden">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">📦 Varelinjer</span>
+            <button class="btn btn-sm btn-secondary" onclick="addVarelinje()">➕ Legg til</button>
+          </div>
+          <div class="panel-content" style="overflow-x: auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Beskrivelse (31)</th>
+                  <th>Varenummer (33)</th>
+                  <th>Opprinnelse (34)</th>
+                  <th>Bruttovekt (35)</th>
+                  <th>Nettovekt (38)</th>
+                  <th>Pris (42)</th>
+                  <th>Prosedyre (37)</th>
+                </tr>
+              </thead>
+              <tbody id="varelinjerBody">
+                <tr>
+                  <td>1</td>
+                  <td><input type="text" id="vare0_beskrivelse" /></td>
+                  <td><input type="text" id="vare0_varenummer" style="width:100px" /></td>
+                  <td><input type="text" id="vare0_opprinnelse" maxlength="2" style="width:45px" /></td>
+                  <td><input type="number" step="0.01" id="vare0_bruttovekt" style="width:65px" /></td>
+                  <td><input type="number" step="0.01" id="vare0_nettovekt" style="width:65px" /></td>
+                  <td><input type="number" step="0.01" id="vare0_pris" style="width:75px" /></td>
+                  <td>
+                    <select id="vare0_prosedyre" style="width:60px">
+                      <option value="40">40</option>
+                      <option value="41">41</option>
+                      <option value="49">49</option>
+                    </select>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Eksport Tab -->
+      <div id="eksportTab" class="hidden">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">📤 Eksportformat</span>
+          </div>
+          <div class="panel-content">
+            <div class="export-grid">
+              <div class="export-option selected" onclick="selectFormat('edifact')">
+                <div class="export-icon">📋</div>
+                <div class="export-label">EDIFACT</div>
+                <div class="export-desc">TVINN CUSDEC</div>
+              </div>
+              <div class="export-option" onclick="selectFormat('json')">
+                <div class="export-icon">📦</div>
+                <div class="export-label">JSON</div>
+                <div class="export-desc">API</div>
+              </div>
+              <div class="export-option" onclick="selectFormat('csv')">
+                <div class="export-icon">📊</div>
+                <div class="export-label">CSV</div>
+                <div class="export-desc">Excel</div>
+              </div>
+              <div class="export-option" onclick="selectFormat('xml')">
+                <div class="export-icon">🌐</div>
+                <div class="export-label">XML</div>
+                <div class="export-desc">WCO DM</div>
+              </div>
+            </div>
+            
+            <div class="export-preview">
+              <pre id="exportPreview">Fyll ut skjemaet for å se eksport...</pre>
+            </div>
+            
+            <div class="btn-row">
+              <button class="btn btn-secondary" onclick="copyExport()">📋 Kopier</button>
+              <button class="btn btn-primary" onclick="downloadExport()">⬇️ Last ned</button>
+              <button class="btn btn-success" onclick="sendToTVINN()">🚀 Send til TVINN</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <h4>ℹ️ Om TVINN-eksporten</h4>
+          <p>For å sende deklarasjoner til TVINN trenger du:</p>
+          <ul>
+            <li>NODI-nummer fra Norstella</li>
+            <li>TVINN-tillatelse fra Tolletaten</li>
+            <li>Godkjent programvare og testperiode</li>
+          </ul>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let currentFormat = 'edifact';
+    let varelinjeCount = 1;
+    
+    // Set default date
+    document.getElementById('deklarasjonsdato').value = new Date().toISOString().split('T')[0];
+    
+    function loadDemoData() {
+      // Fill with demo data
+      document.getElementById('kategori').value = 'IM-A';
+      document.getElementById('antallKolli').value = '5';
+      document.getElementById('avsender').value = 'Schmidt Electronics GmbH';
+      document.getElementById('avsenderland').value = 'DE';
+      document.getElementById('mottaker').value = 'Nordisk Import AS';
+      document.getElementById('mottakerOrgnr').value = '987654321';
+      document.getElementById('tollrepresentant').value = 'Speditør Norge AS';
+      document.getElementById('tollrepOrgnr').value = '123456789';
+      document.getElementById('fakturabelop').value = '15000';
+      document.getElementById('valuta').value = 'EUR';
+      document.getElementById('incoterms').value = 'DAP';
+      document.getElementById('transportmate').value = '3';
+      document.getElementById('fakturanummer').value = 'INV-2024-001234';
+      document.getElementById('fakturadato').value = '2024-11-20';
+      
+      // Varelinje
+      document.getElementById('vare0_beskrivelse').value = 'Elektroniske komponenter';
+      document.getElementById('vare0_varenummer').value = '8542.31.0000';
+      document.getElementById('vare0_opprinnelse').value = 'DE';
+      document.getElementById('vare0_bruttovekt').value = '125';
+      document.getElementById('vare0_nettovekt').value = '100';
+      document.getElementById('vare0_pris').value = '15000';
+      
+      // Mark as filled
+      document.querySelectorAll('.form-input, .form-select').forEach(el => {
+        if (el.value) el.classList.add('filled');
+      });
+      
+      document.getElementById('welcomeAlert').innerHTML = '✅ <strong>Demodata lastet!</strong> Gå til "Eksport" for å se TVINN-formatet.';
+      document.getElementById('welcomeAlert').className = 'alert alert-success';
+      
+      updateExport();
+    }
+    
+    function showTab(name) {
+      document.querySelectorAll('[id$="Tab"]').forEach(t => t.classList.add('hidden'));
+      document.getElementById(name + 'Tab').classList.remove('hidden');
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      if (name === 'eksport') updateExport();
+    }
+    
+    function selectFormat(format) {
+      currentFormat = format;
+      document.querySelectorAll('.export-option').forEach(o => o.classList.remove('selected'));
+      event.currentTarget.classList.add('selected');
+      updateExport();
+    }
+    
+    function addVarelinje() {
+      const tbody = document.getElementById('varelinjerBody');
+      const idx = varelinjeCount++;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${idx + 1}</td>
+        <td><input type="text" id="vare${idx}_beskrivelse" /></td>
+        <td><input type="text" id="vare${idx}_varenummer" style="width:100px" /></td>
+        <td><input type="text" id="vare${idx}_opprinnelse" maxlength="2" style="width:45px" /></td>
+        <td><input type="number" step="0.01" id="vare${idx}_bruttovekt" style="width:65px" /></td>
+        <td><input type="number" step="0.01" id="vare${idx}_nettovekt" style="width:65px" /></td>
+        <td><input type="number" step="0.01" id="vare${idx}_pris" style="width:75px" /></td>
+        <td><select id="vare${idx}_prosedyre" style="width:60px"><option value="40">40</option><option value="41">41</option><option value="49">49</option></select></td>
+      `;
+      tbody.appendChild(tr);
+    }
+    
+    function getFormData() {
+      const varelinjer = [];
+      for (let i = 0; i < varelinjeCount; i++) {
+        const el = document.getElementById(`vare${i}_beskrivelse`);
+        if (el) {
+          varelinjer.push({
+            beskrivelse: el.value || '',
+            varenummer: document.getElementById(`vare${i}_varenummer`)?.value || '',
+            opprinnelse: document.getElementById(`vare${i}_opprinnelse`)?.value || '',
+            bruttovekt: document.getElementById(`vare${i}_bruttovekt`)?.value || '',
+            nettovekt: document.getElementById(`vare${i}_nettovekt`)?.value || '',
+            pris: document.getElementById(`vare${i}_pris`)?.value || '',
+            prosedyre: document.getElementById(`vare${i}_prosedyre`)?.value || '40'
+          });
+        }
+      }
+      
+      return {
+        kategori: document.getElementById('kategori').value,
+        ekspedisjonsenhet: document.getElementById('ekspedisjonsenhet').value,
+        deklarasjonsdato: document.getElementById('deklarasjonsdato').value,
+        antallKolli: document.getElementById('antallKolli').value,
+        avsender: document.getElementById('avsender').value,
+        avsenderland: document.getElementById('avsenderland').value,
+        mottaker: document.getElementById('mottaker').value,
+        mottakerOrgnr: document.getElementById('mottakerOrgnr').value,
+        tollrepresentant: document.getElementById('tollrepresentant').value,
+        tollrepOrgnr: document.getElementById('tollrepOrgnr').value,
+        fakturabelop: document.getElementById('fakturabelop').value,
+        valuta: document.getElementById('valuta').value,
+        incoterms: document.getElementById('incoterms').value,
+        transportmate: document.getElementById('transportmate').value,
+        fakturanummer: document.getElementById('fakturanummer').value,
+        fakturadato: document.getElementById('fakturadato').value,
+        varelinjer
+      };
+    }
+    
+    function generateEDIFACT(d) {
+      const now = new Date();
+      const date = d.deklarasjonsdato?.replace(/-/g, '') || now.toISOString().slice(0,10).replace(/-/g,'');
+      const time = now.toTimeString().slice(0,5).replace(':','');
+      const ref = (d.tollrepOrgnr || '123456789') + date + '000001';
+      
+      let lines = [];
+      lines.push(`UNA:+.? '`);
+      lines.push(`UNB+UNOC:3+${d.tollrepOrgnr || 'SENDER'}:ZZZ+TOLLETATEN:ZZZ+${date}:${time}+${ref}'`);
+      lines.push(`UNH+1+CUSDEC:D:96B:UN:TOLL01'`);
+      lines.push(`BGM+929+${ref}+9'`);
+      lines.push(`DTM+137:${date}:102'`);
+      lines.push(`LOC+22+${d.ekspedisjonsenhet || '441002'}'`);
+      
+      if (d.varelinjer[0]?.prosedyre) lines.push(`GEI+ABB+${d.varelinjer[0].prosedyre}'`);
+      if (d.antallKolli) lines.push(`PAC+${d.antallKolli}'`);
+      if (d.transportmate) lines.push(`TDT+20++++${d.transportmate}'`);
+      if (d.avsender) lines.push(`NAD+EX+++${d.avsender}++++${d.avsenderland || ''}'`);
+      if (d.mottaker) lines.push(`NAD+IM+${d.mottakerOrgnr || ''}:160++${d.mottaker}++++NO'`);
+      if (d.tollrepresentant) lines.push(`NAD+AG+${d.tollrepOrgnr || ''}:160++${d.tollrepresentant}++++NO'`);
+      if (d.incoterms) lines.push(`TOD+6++${d.incoterms}'`);
+      if (d.fakturanummer) {
+        lines.push(`RFF+IV:${d.fakturanummer}'`);
+        if (d.fakturadato) lines.push(`DTM+171:${d.fakturadato.replace(/-/g,'')}:102'`);
+      }
+      if (d.fakturabelop) lines.push(`MOA+79:${d.fakturabelop}:${d.valuta || 'EUR'}'`);
+      
+      d.varelinjer.forEach((v, i) => {
+        if (v.beskrivelse || v.varenummer) {
+          lines.push(`LIN+${i+1}'`);
+          if (v.varenummer) lines.push(`TAX+COT+${v.varenummer.replace(/\./g,'')}'`);
+          if (v.beskrivelse) lines.push(`FTX+AAA+++${v.beskrivelse.substring(0,70)}'`);
+          if (v.opprinnelse) lines.push(`LOC+27+${v.opprinnelse}'`);
+          if (v.bruttovekt) lines.push(`MEA+AAE+G+KGM:${v.bruttovekt}'`);
+          if (v.nettovekt) lines.push(`MEA+AAF+G+KGM:${v.nettovekt}'`);
+          if (v.pris) lines.push(`MOA+38:${v.pris}:NOK'`);
+          if (v.prosedyre) lines.push(`GEI+ABB+${v.prosedyre}'`);
+        }
+      });
+      
+      lines.push(`CNT+2:${d.varelinjer.filter(v => v.beskrivelse || v.varenummer).length || 1}'`);
+      lines.push(`UNT+${lines.length}+1'`);
+      lines.push(`UNZ+1+${ref}'`);
+      
+      return lines.join('\n');
+    }
+    
+    function generateJSON(d) {
+      return JSON.stringify({
+        deklarasjon: {
+          type: d.kategori,
+          dato: d.deklarasjonsdato,
+          ekspedisjonsenhet: d.ekspedisjonsenhet,
+          avsender: { navn: d.avsender, land: d.avsenderland },
+          mottaker: { navn: d.mottaker, orgnr: d.mottakerOrgnr },
+          tollrepresentant: { navn: d.tollrepresentant, orgnr: d.tollrepOrgnr },
+          verdi: { belop: d.fakturabelop, valuta: d.valuta },
+          incoterms: d.incoterms,
+          transportmate: d.transportmate,
+          faktura: { nummer: d.fakturanummer, dato: d.fakturadato },
+          varelinjer: d.varelinjer.filter(v => v.beskrivelse || v.varenummer)
+        }
+      }, null, 2);
+    }
+    
+    function generateCSV(d) {
+      const header = '#;Beskrivelse;Varenummer;Opprinnelse;Bruttovekt;Nettovekt;Pris;Prosedyre';
+      const rows = d.varelinjer.filter(v => v.beskrivelse || v.varenummer)
+        .map((v, i) => `${i+1};"${v.beskrivelse}";${v.varenummer};${v.opprinnelse};${v.bruttovekt};${v.nettovekt};${v.pris};${v.prosedyre}`);
+      return [header, ...rows].join('\n');
+    }
+    
+    function generateXML(d) {
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<Declaration xmlns="urn:wco:datamodel:WCO:DEC-DMS:2">
+  <TypeCode>${d.kategori?.split('-')[0] || 'IM'}</TypeCode>
+  <DeclarationOfficeID>${d.ekspedisjonsenhet}</DeclarationOfficeID>
+  <IssueDateTime>${d.deklarasjonsdato}</IssueDateTime>
+  <Consignor>
+    <Name>${d.avsender || ''}</Name>
+    <Address><CountryCode>${d.avsenderland || ''}</CountryCode></Address>
+  </Consignor>
+  <Consignee>
+    <Name>${d.mottaker || ''}</Name>
+    <ID>${d.mottakerOrgnr || ''}</ID>
+  </Consignee>
+  <InvoiceAmount currencyID="${d.valuta}">${d.fakturabelop || ''}</InvoiceAmount>
+  <GoodsShipment>
+${d.varelinjer.filter(v => v.beskrivelse || v.varenummer).map((v, i) => `    <GovernmentAgencyGoodsItem>
+      <SequenceNumeric>${i+1}</SequenceNumeric>
+      <Description>${v.beskrivelse}</Description>
+      <Classification><ID>${v.varenummer?.replace(/\./g,'')}</ID></Classification>
+      <Origin><CountryCode>${v.opprinnelse}</CountryCode></Origin>
+      <GrossMassMeasure>${v.bruttovekt}</GrossMassMeasure>
+    </GovernmentAgencyGoodsItem>`).join('\n')}
+  </GoodsShipment>
+</Declaration>`;
+    }
+    
+    function updateExport() {
+      const data = getFormData();
+      let content;
+      switch (currentFormat) {
+        case 'edifact': content = generateEDIFACT(data); break;
+        case 'json': content = generateJSON(data); break;
+        case 'csv': content = generateCSV(data); break;
+        case 'xml': content = generateXML(data); break;
+      }
+      document.getElementById('exportPreview').textContent = content;
+    }
+    
+    function copyExport() {
+      navigator.clipboard.writeText(document.getElementById('exportPreview').textContent)
+        .then(() => alert('Kopiert!'));
+    }
+    
+    function downloadExport() {
+      const content = document.getElementById('exportPreview').textContent;
+      const ext = { edifact: 'edi', json: 'json', csv: 'csv', xml: 'xml' }[currentFormat];
+      const blob = new Blob([content], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `tolldeklarasjon.${ext}`;
+      a.click();
+    }
+    
+    function sendToTVINN() {
+      alert('For å sende til TVINN trenger du:\n\n1. NODI-nummer fra Norstella\n2. TVINN-tillatelse fra Tolletaten\n3. Godkjent programvare\n\nKontakt: toll.no/bedrift/tvinn');
+    }
+    
+    // Update on input
+    document.addEventListener('input', updateExport);
+  </script>
+</body>
+</html>
