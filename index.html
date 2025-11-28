@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TollSkanner - Automatisk Tolldeklarasjon for Norge</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     :root {
       --primary: #1e40af;
@@ -14,7 +15,6 @@
       --danger: #dc2626;
       --bg: #f8fafc;
       --bg-card: #ffffff;
-      --bg-dark: #0f172a;
       --border: #e2e8f0;
       --text: #1e293b;
       --text-muted: #64748b;
@@ -57,7 +57,7 @@
     }
     .header-actions { display: flex; gap: 0.5rem; }
     
-    .main { display: grid; grid-template-columns: 360px 1fr; min-height: calc(100vh - 80px); }
+    .main { display: grid; grid-template-columns: 380px 1fr; min-height: calc(100vh - 80px); }
     @media (max-width: 1000px) { .main { grid-template-columns: 1fr; } }
     
     .sidebar {
@@ -89,6 +89,7 @@
       transition: all 0.2s;
     }
     .upload-zone:hover { border-color: var(--primary-light); background: #e0e7ff; }
+    .upload-zone.dragover { border-color: var(--primary); background: #dbeafe; }
     .upload-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
     .upload-title { font-weight: 600; margin-bottom: 0.25rem; }
     .upload-hint { font-size: 0.8rem; color: var(--text-muted); }
@@ -128,6 +129,74 @@
       display: inline-block;
       margin-right: 0.375rem;
     }
+    .status-dot.loading { background: var(--warning); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    
+    .progress-container {
+      margin-top: 1rem;
+      display: none;
+    }
+    .progress-container.active { display: block; }
+    .progress-bar {
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--primary);
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .progress-text {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      text-align: center;
+    }
+    
+    .preview-container {
+      margin-top: 1rem;
+      display: none;
+    }
+    .preview-container.active { display: block; }
+    .preview-image {
+      width: 100%;
+      max-height: 200px;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .preview-filename {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      text-align: center;
+    }
+    
+    .extracted-data {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-radius: 8px;
+      display: none;
+    }
+    .extracted-data.active { display: block; }
+    .extracted-data h4 {
+      font-size: 0.8rem;
+      color: var(--success);
+      margin-bottom: 0.5rem;
+    }
+    .extracted-item {
+      font-size: 0.75rem;
+      padding: 0.25rem 0;
+      display: flex;
+      justify-content: space-between;
+    }
+    .extracted-item span:first-child { color: var(--text-muted); }
+    .extracted-item span:last-child { font-weight: 500; }
     
     .content { padding: 1.5rem; overflow-y: auto; }
     
@@ -226,7 +295,7 @@
       text-transform: uppercase;
     }
     .data-table td { padding: 0.375rem; border-bottom: 1px solid var(--border); }
-    .data-table input {
+    .data-table input, .data-table select {
       width: 100%;
       padding: 0.375rem;
       border: 1px solid var(--border);
@@ -249,6 +318,7 @@
     .btn-primary:hover { background: var(--primary-dark); }
     .btn-secondary { background: white; color: var(--text); border: 1px solid var(--border); }
     .btn-success { background: var(--success); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
     .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
     .btn-sm { padding: 0.375rem 0.625rem; font-size: 0.75rem; }
     
@@ -273,7 +343,7 @@
     .export-desc { font-size: 0.65rem; color: var(--text-muted); }
     
     .export-preview {
-      background: var(--bg-dark);
+      background: #0f172a;
       border-radius: 8px;
       padding: 1rem;
       max-height: 280px;
@@ -281,7 +351,7 @@
       margin-bottom: 1rem;
     }
     .export-preview pre {
-      font-family: 'Consolas', monospace;
+      font-family: 'Consolas', 'Monaco', monospace;
       font-size: 0.7rem;
       color: #94a3b8;
       white-space: pre-wrap;
@@ -311,6 +381,7 @@
     }
     .alert-success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
     .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+    .alert-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
     
     .hidden { display: none !important; }
   </style>
@@ -326,7 +397,7 @@
     </div>
     <div class="header-actions">
       <span class="badge">🇳🇴 Norge</span>
-      <span class="badge">Digitoll 441002</span>
+      <span class="badge">TVINN/Digitoll</span>
     </div>
   </header>
 
@@ -334,12 +405,30 @@
     <aside class="sidebar">
       <div class="section">
         <div class="section-title">📄 Last opp dokument</div>
-        <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-zone" id="uploadZone">
           <div class="upload-icon">📄</div>
-          <div class="upload-title">Slipp dokumenter her</div>
-          <div class="upload-hint">eller klikk for å velge fil</div>
+          <div class="upload-title">Slipp faktura/dokument her</div>
+          <div class="upload-hint">PDF, PNG, JPG (maks 10MB)</div>
         </div>
         <input type="file" id="fileInput" accept="image/*,.pdf" />
+        
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-text" id="progressText">Forbereder OCR...</div>
+        </div>
+        
+        <div class="preview-container" id="previewContainer">
+          <img id="previewImage" class="preview-image" />
+          <div class="preview-filename" id="previewFilename"></div>
+        </div>
+        
+        <div class="extracted-data" id="extractedData">
+          <h4>✅ Ekstraherte data</h4>
+          <div id="extractedItems"></div>
+        </div>
+        
         <button class="demo-btn" onclick="loadDemoData()">🎯 Last inn demodata</button>
       </div>
       
@@ -347,24 +436,34 @@
         <div class="section-title">⚡ Systemstatus</div>
         <div class="status-box">
           <div class="status-item">
+            <span>OCR Motor</span>
+            <span><span class="status-dot" id="ocrStatus"></span><span id="ocrStatusText">Klar</span></span>
+          </div>
+          <div class="status-item">
             <span>TVINN Format</span>
-            <span><span class="status-dot"></span>CUSDEC</span>
+            <span>CUSDEC D.96B</span>
           </div>
           <div class="status-item">
             <span>Ekspedisjonsenhet</span>
             <span>441002</span>
           </div>
-          <div class="status-item">
-            <span>Status</span>
-            <span><span class="status-dot"></span>Klar</span>
-          </div>
+        </div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">❓ Hjelp</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">
+          <p><strong>1.</strong> Last opp faktura (bilde/PDF)</p>
+          <p><strong>2.</strong> OCR leser teksten automatisk</p>
+          <p><strong>3.</strong> Korriger data om nødvendig</p>
+          <p><strong>4.</strong> Eksporter til TVINN-format</p>
         </div>
       </div>
     </aside>
 
     <main class="content">
       <div class="alert alert-info" id="welcomeAlert">
-        💡 <strong>Velkommen!</strong> Last opp en faktura eller klikk "Last inn demodata" for å teste systemet.
+        💡 <strong>Velkommen!</strong> Last opp en faktura for å starte, eller klikk "Last inn demodata" for å teste.
       </div>
       
       <div class="tabs">
@@ -387,6 +486,7 @@
                 <select class="form-select" id="kategori">
                   <option value="">Velg...</option>
                   <option value="IM-A">IM A - Ordinær innførsel</option>
+                  <option value="IM-B">IM B - Forenklet innførsel</option>
                   <option value="EU-A">EU A - Fra EU/EØS</option>
                   <option value="EX-A">EX A - Ordinær utførsel</option>
                 </select>
@@ -401,7 +501,11 @@
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Antall kolli</span><span class="field-code">Rubr. 6</span></label>
-                <input type="number" class="form-input" id="antallKolli" />
+                <input type="number" class="form-input" id="antallKolli" placeholder="f.eks. 5" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Godsnummer</span><span class="field-code">Rubr. 49</span></label>
+                <input type="text" class="form-input" id="godsnummer" maxlength="15" placeholder="Maks 15 tegn" />
               </div>
             </div>
           </div>
@@ -416,34 +520,39 @@
             <div class="form-grid">
               <div class="form-group">
                 <label class="form-label"><span>Avsender/Eksportør</span><span class="field-code">Rubr. 2</span></label>
-                <input type="text" class="form-input" id="avsender" />
+                <input type="text" class="form-input" id="avsender" placeholder="Firmanavn" />
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Avsenderland</span><span class="field-code">Rubr. 15a</span></label>
                 <select class="form-select" id="avsenderland">
-                  <option value="">Velg...</option>
-                  <option value="DE">Tyskland</option>
-                  <option value="CN">Kina</option>
-                  <option value="SE">Sverige</option>
-                  <option value="GB">Storbritannia</option>
-                  <option value="US">USA</option>
+                  <option value="">Velg land...</option>
+                  <option value="DE">🇩🇪 Tyskland</option>
+                  <option value="CN">🇨🇳 Kina</option>
+                  <option value="SE">🇸🇪 Sverige</option>
+                  <option value="GB">🇬🇧 Storbritannia</option>
+                  <option value="US">🇺🇸 USA</option>
+                  <option value="NL">🇳🇱 Nederland</option>
+                  <option value="DK">🇩🇰 Danmark</option>
+                  <option value="PL">🇵🇱 Polen</option>
+                  <option value="FR">🇫🇷 Frankrike</option>
+                  <option value="IT">🇮🇹 Italia</option>
                 </select>
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Mottaker/Importør</span><span class="field-code">Rubr. 8</span></label>
-                <input type="text" class="form-input" id="mottaker" />
+                <input type="text" class="form-input" id="mottaker" placeholder="Norsk firma" />
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Mottakers org.nr</span><span class="field-code">Rubr. 8</span></label>
-                <input type="text" class="form-input" id="mottakerOrgnr" maxlength="9" />
+                <input type="text" class="form-input" id="mottakerOrgnr" maxlength="9" placeholder="9 siffer" />
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Tollrepresentant</span><span class="field-code">Rubr. 14</span></label>
-                <input type="text" class="form-input" id="tollrepresentant" />
+                <input type="text" class="form-input" id="tollrepresentant" placeholder="Speditør" />
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Tollrep. org.nr</span><span class="field-code">Rubr. 14</span></label>
-                <input type="text" class="form-input" id="tollrepOrgnr" maxlength="9" />
+                <input type="text" class="form-input" id="tollrepOrgnr" maxlength="9" placeholder="9 siffer" />
               </div>
             </div>
           </div>
@@ -452,44 +561,69 @@
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">💰 Verdi og valuta</span>
-            <span class="panel-badge">Rubrikk 22-23</span>
+            <span class="panel-badge">Rubrikk 20-24</span>
           </div>
           <div class="panel-content">
             <div class="form-grid">
               <div class="form-group">
                 <label class="form-label"><span>Fakturabeløp</span><span class="field-code">Rubr. 22</span></label>
-                <input type="number" step="0.01" class="form-input" id="fakturabelop" />
+                <input type="number" step="0.01" class="form-input" id="fakturabelop" placeholder="0.00" />
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Valuta</span><span class="field-code">Rubr. 22</span></label>
                 <select class="form-select" id="valuta">
-                  <option value="EUR">EUR</option>
-                  <option value="USD">USD</option>
-                  <option value="GBP">GBP</option>
-                  <option value="SEK">SEK</option>
-                  <option value="NOK">NOK</option>
+                  <option value="EUR">EUR €</option>
+                  <option value="USD">USD $</option>
+                  <option value="GBP">GBP £</option>
+                  <option value="SEK">SEK kr</option>
+                  <option value="DKK">DKK kr</option>
+                  <option value="NOK">NOK kr</option>
+                  <option value="CNY">CNY ¥</option>
+                  <option value="CHF">CHF</option>
                 </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Statistisk verdi (NOK)</span><span class="field-code">Rubr. 46</span></label>
+                <input type="number" step="0.01" class="form-input" id="statistiskVerdi" placeholder="Beregnes automatisk" />
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Leveringsbetingelser</span><span class="field-code">Rubr. 20</span></label>
                 <select class="form-select" id="incoterms">
                   <option value="">Velg Incoterms...</option>
-                  <option value="EXW">EXW</option>
-                  <option value="FCA">FCA</option>
-                  <option value="DAP">DAP</option>
-                  <option value="DDP">DDP</option>
-                  <option value="FOB">FOB</option>
-                  <option value="CIF">CIF</option>
+                  <option value="EXW">EXW - Ex Works</option>
+                  <option value="FCA">FCA - Free Carrier</option>
+                  <option value="CPT">CPT - Carriage Paid To</option>
+                  <option value="CIP">CIP - Carriage Insurance Paid</option>
+                  <option value="DAP">DAP - Delivered at Place</option>
+                  <option value="DPU">DPU - Delivered at Place Unloaded</option>
+                  <option value="DDP">DDP - Delivered Duty Paid</option>
+                  <option value="FOB">FOB - Free on Board</option>
+                  <option value="CIF">CIF - Cost Insurance Freight</option>
                 </select>
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Transportmåte</span><span class="field-code">Rubr. 25</span></label>
                 <select class="form-select" id="transportmate">
                   <option value="">Velg...</option>
-                  <option value="1">1 - Sjø</option>
+                  <option value="1">1 - Sjøtransport</option>
                   <option value="2">2 - Jernbane</option>
-                  <option value="3">3 - Vei</option>
-                  <option value="4">4 - Luft</option>
+                  <option value="3">3 - Veitransport</option>
+                  <option value="4">4 - Lufttransport</option>
+                  <option value="5">5 - Post</option>
+                  <option value="7">7 - Rørledning</option>
+                  <option value="8">8 - Fartøy på innlands vannvei</option>
+                  <option value="9">9 - Egen fremdrift</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Grensepasseringssted</span><span class="field-code">Rubr. 29</span></label>
+                <select class="form-select" id="grensested">
+                  <option value="">Velg...</option>
+                  <option value="NO0102">Gardermoen (0102)</option>
+                  <option value="NO0201">Svinesund (0201)</option>
+                  <option value="NO0202">Ørje (0202)</option>
+                  <option value="NO0901">Oslo havn (0901)</option>
+                  <option value="NO1001">Kongsvinger (1001)</option>
                 </select>
               </div>
             </div>
@@ -505,11 +639,15 @@
             <div class="form-grid">
               <div class="form-group">
                 <label class="form-label"><span>Fakturanummer</span><span class="field-code">N380</span></label>
-                <input type="text" class="form-input" id="fakturanummer" />
+                <input type="text" class="form-input" id="fakturanummer" placeholder="INV-2024-001" />
               </div>
               <div class="form-group">
                 <label class="form-label"><span>Fakturadato</span><span class="field-code">DTM</span></label>
                 <input type="date" class="form-input" id="fakturadato" />
+              </div>
+              <div class="form-group">
+                <label class="form-label"><span>Transportdokument</span><span class="field-code">N730/N714</span></label>
+                <input type="text" class="form-input" id="transportdok" placeholder="CMR / B/L nummer" />
               </div>
             </div>
           </div>
@@ -521,42 +659,62 @@
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">📦 Varelinjer</span>
-            <button class="btn btn-sm btn-secondary" onclick="addVarelinje()">➕ Legg til</button>
+            <button class="btn btn-sm btn-primary" onclick="addVarelinje()">➕ Legg til varelinje</button>
           </div>
           <div class="panel-content" style="overflow-x: auto;">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Beskrivelse (31)</th>
-                  <th>Varenummer (33)</th>
-                  <th>Opprinnelse (34)</th>
-                  <th>Bruttovekt (35)</th>
-                  <th>Nettovekt (38)</th>
-                  <th>Pris (42)</th>
-                  <th>Prosedyre (37)</th>
+                  <th style="width:30px">#</th>
+                  <th>Beskrivelse (R31)</th>
+                  <th style="width:110px">Varenummer (R33)</th>
+                  <th style="width:60px">Opprin. (R34)</th>
+                  <th style="width:80px">Brutto kg (R35)</th>
+                  <th style="width:80px">Netto kg (R38)</th>
+                  <th style="width:90px">Pris NOK (R42)</th>
+                  <th style="width:70px">Prosedyre (R37)</th>
+                  <th style="width:40px"></th>
                 </tr>
               </thead>
               <tbody id="varelinjerBody">
-                <tr>
+                <tr data-index="0">
                   <td>1</td>
-                  <td><input type="text" id="vare0_beskrivelse" /></td>
-                  <td><input type="text" id="vare0_varenummer" style="width:100px" /></td>
-                  <td><input type="text" id="vare0_opprinnelse" maxlength="2" style="width:45px" /></td>
-                  <td><input type="number" step="0.01" id="vare0_bruttovekt" style="width:65px" /></td>
-                  <td><input type="number" step="0.01" id="vare0_nettovekt" style="width:65px" /></td>
-                  <td><input type="number" step="0.01" id="vare0_pris" style="width:75px" /></td>
+                  <td><input type="text" id="vare0_beskrivelse" placeholder="Varebeskrivelse" /></td>
+                  <td><input type="text" id="vare0_varenummer" placeholder="8542.31.00" /></td>
+                  <td><input type="text" id="vare0_opprinnelse" maxlength="2" placeholder="DE" /></td>
+                  <td><input type="number" step="0.01" id="vare0_bruttovekt" placeholder="0.00" /></td>
+                  <td><input type="number" step="0.01" id="vare0_nettovekt" placeholder="0.00" /></td>
+                  <td><input type="number" step="0.01" id="vare0_pris" placeholder="0.00" /></td>
                   <td>
-                    <select id="vare0_prosedyre" style="width:60px">
+                    <select id="vare0_prosedyre">
                       <option value="40">40</option>
                       <option value="41">41</option>
+                      <option value="42">42</option>
                       <option value="49">49</option>
+                      <option value="53">53</option>
+                      <option value="61">61</option>
                     </select>
                   </td>
+                  <td><button class="btn btn-sm btn-danger" onclick="removeVarelinje(0)">✕</button></td>
                 </tr>
               </tbody>
+              <tfoot>
+                <tr style="background: #f8fafc; font-weight: 600;">
+                  <td colspan="4" style="text-align: right;">Sum:</td>
+                  <td id="sumBrutto">0.00</td>
+                  <td id="sumNetto">0.00</td>
+                  <td id="sumPris">0.00</td>
+                  <td colspan="2"></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
+        </div>
+        
+        <div class="info-box">
+          <h4>💡 Tips for varenummer (HS-kode)</h4>
+          <p>Varenummeret skal ha 8-10 siffer. Format: XXXX.XX.XXXX</p>
+          <p>Finn riktig varenummer på <a href="https://tolltariffen.toll.no" target="_blank">tolltariffen.toll.no</a></p>
         </div>
       </div>
 
@@ -564,7 +722,7 @@
       <div id="eksportTab" class="hidden">
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title">📤 Eksportformat</span>
+            <span class="panel-title">📤 Velg eksportformat</span>
           </div>
           <div class="panel-content">
             <div class="export-grid">
@@ -576,7 +734,7 @@
               <div class="export-option" onclick="selectFormat('json')">
                 <div class="export-icon">📦</div>
                 <div class="export-label">JSON</div>
-                <div class="export-desc">API</div>
+                <div class="export-desc">API-format</div>
               </div>
               <div class="export-option" onclick="selectFormat('csv')">
                 <div class="export-icon">📊</div>
@@ -586,7 +744,7 @@
               <div class="export-option" onclick="selectFormat('xml')">
                 <div class="export-icon">🌐</div>
                 <div class="export-label">XML</div>
-                <div class="export-desc">WCO DM</div>
+                <div class="export-desc">WCO Data Model</div>
               </div>
             </div>
             
@@ -596,20 +754,22 @@
             
             <div class="btn-row">
               <button class="btn btn-secondary" onclick="copyExport()">📋 Kopier</button>
-              <button class="btn btn-primary" onclick="downloadExport()">⬇️ Last ned</button>
+              <button class="btn btn-primary" onclick="downloadExport()">⬇️ Last ned fil</button>
               <button class="btn btn-success" onclick="sendToTVINN()">🚀 Send til TVINN</button>
             </div>
           </div>
         </div>
 
         <div class="info-box">
-          <h4>ℹ️ Om TVINN-eksporten</h4>
-          <p>For å sende deklarasjoner til TVINN trenger du:</p>
+          <h4>ℹ️ Om TVINN-integrasjon</h4>
+          <p>For å sende deklarasjoner direkte til TVINN trenger du:</p>
           <ul>
-            <li>NODI-nummer fra Norstella</li>
+            <li>NODI-nummer fra Norstella (1 995 kr/år)</li>
             <li>TVINN-tillatelse fra Tolletaten</li>
-            <li>Godkjent programvare og testperiode</li>
+            <li>Godkjent programvare etter testperiode</li>
+            <li>Kommunikasjon via Tietoevry</li>
           </ul>
+          <p style="margin-top: 0.5rem;">Kontakt: <a href="https://toll.no/bedrift/tvinn" target="_blank">toll.no/bedrift/tvinn</a></p>
         </div>
       </div>
     </main>
@@ -618,12 +778,295 @@
   <script>
     let currentFormat = 'edifact';
     let varelinjeCount = 1;
+    let ocrWorker = null;
     
     // Set default date
     document.getElementById('deklarasjonsdato').value = new Date().toISOString().split('T')[0];
     
+    // Upload zone handlers
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    
+    uploadZone.addEventListener('click', () => fileInput.click());
+    
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+    
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+    
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) processFile(file);
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) processFile(file);
+    });
+    
+    async function processFile(file) {
+      // Show preview
+      const previewContainer = document.getElementById('previewContainer');
+      const previewImage = document.getElementById('previewImage');
+      const previewFilename = document.getElementById('previewFilename');
+      
+      if (file.type.startsWith('image/')) {
+        previewImage.src = URL.createObjectURL(file);
+        previewContainer.classList.add('active');
+      }
+      previewFilename.textContent = file.name;
+      previewContainer.classList.add('active');
+      
+      // Show progress
+      const progressContainer = document.getElementById('progressContainer');
+      const progressFill = document.getElementById('progressFill');
+      const progressText = document.getElementById('progressText');
+      progressContainer.classList.add('active');
+      
+      // Update OCR status
+      document.getElementById('ocrStatus').classList.add('loading');
+      document.getElementById('ocrStatusText').textContent = 'Leser...';
+      
+      try {
+        progressText.textContent = 'Starter OCR-motor...';
+        progressFill.style.width = '10%';
+        
+        // Initialize Tesseract
+        const worker = await Tesseract.createWorker('nor+eng+deu', 1, {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              const pct = Math.round(m.progress * 80) + 20;
+              progressFill.style.width = pct + '%';
+              progressText.textContent = `Leser tekst... ${pct}%`;
+            }
+          }
+        });
+        
+        progressText.textContent = 'Analyserer dokument...';
+        progressFill.style.width = '20%';
+        
+        const { data: { text } } = await worker.recognize(file);
+        
+        progressFill.style.width = '100%';
+        progressText.textContent = 'Ferdig!';
+        
+        await worker.terminate();
+        
+        // Extract data from OCR text
+        extractDataFromText(text);
+        
+        // Update status
+        document.getElementById('ocrStatus').classList.remove('loading');
+        document.getElementById('ocrStatusText').textContent = 'Ferdig';
+        
+        // Hide progress after delay
+        setTimeout(() => {
+          progressContainer.classList.remove('active');
+        }, 2000);
+        
+        // Update welcome message
+        document.getElementById('welcomeAlert').innerHTML = '✅ <strong>Dokument skannet!</strong> Sjekk at dataene stemmer og gå til "Eksport".';
+        document.getElementById('welcomeAlert').className = 'alert alert-success';
+        
+      } catch (error) {
+        console.error('OCR Error:', error);
+        progressText.textContent = 'Feil ved lesing av dokument';
+        document.getElementById('ocrStatus').classList.remove('loading');
+        document.getElementById('ocrStatusText').textContent = 'Feil';
+        
+        document.getElementById('welcomeAlert').innerHTML = '⚠️ <strong>Kunne ikke lese dokumentet.</strong> Prøv et annet bilde eller fyll ut manuelt.';
+        document.getElementById('welcomeAlert').className = 'alert alert-warning';
+      }
+    }
+    
+    function extractDataFromText(text) {
+      const extracted = {};
+      const extractedItems = document.getElementById('extractedItems');
+      extractedItems.innerHTML = '';
+      
+      // Invoice number patterns
+      const invoicePatterns = [
+        /(?:faktura|invoice|inv|fakt)[\s\-\.:]*[#nr.]*[\s\-\.:]*([A-Z0-9\-\/]+)/i,
+        /(?:fakturanr|invoice no|inv no)[\s\-\.:]*([A-Z0-9\-\/]+)/i,
+        /([A-Z]{2,3}[\-\/]?\d{4,}[\-\/]?\d*)/i
+      ];
+      
+      for (const pattern of invoicePatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          extracted.fakturanummer = match[1].trim();
+          document.getElementById('fakturanummer').value = extracted.fakturanummer;
+          document.getElementById('fakturanummer').classList.add('filled');
+          break;
+        }
+      }
+      
+      // Date patterns (DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD)
+      const datePatterns = [
+        /(\d{1,2})[\.\/\-](\d{1,2})[\.\/\-](\d{4})/,
+        /(\d{4})[\.\/\-](\d{1,2})[\.\/\-](\d{1,2})/
+      ];
+      
+      for (const pattern of datePatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          let dateStr;
+          if (match[1].length === 4) {
+            dateStr = `${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;
+          } else {
+            dateStr = `${match[3]}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`;
+          }
+          extracted.fakturadato = dateStr;
+          document.getElementById('fakturadato').value = dateStr;
+          document.getElementById('fakturadato').classList.add('filled');
+          break;
+        }
+      }
+      
+      // Amount patterns
+      const amountPatterns = [
+        /(?:total|sum|beløp|amount|netto|brutto|subtotal)[\s\-\.:]*([€$£]?)[\s]*([0-9\s,.]+)/gi,
+        /([€$£])\s*([0-9\s,.]+)/g,
+        /([0-9\s]+[.,]\d{2})\s*(?:EUR|USD|NOK|GBP|SEK|DKK)/gi
+      ];
+      
+      let amounts = [];
+      for (const pattern of amountPatterns) {
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+          const numStr = (match[2] || match[1]).replace(/\s/g, '').replace(',', '.');
+          const num = parseFloat(numStr);
+          if (!isNaN(num) && num > 0) {
+            amounts.push(num);
+          }
+        }
+      }
+      
+      if (amounts.length > 0) {
+        const maxAmount = Math.max(...amounts);
+        extracted.fakturabelop = maxAmount;
+        document.getElementById('fakturabelop').value = maxAmount;
+        document.getElementById('fakturabelop').classList.add('filled');
+      }
+      
+      // Currency detection
+      const currencies = {
+        'EUR': /EUR|€/i, 'USD': /USD|\$/i, 'GBP': /GBP|£/i,
+        'SEK': /SEK/i, 'DKK': /DKK/i, 'NOK': /NOK/i, 'CNY': /CNY|¥/i
+      };
+      
+      for (const [code, pattern] of Object.entries(currencies)) {
+        if (pattern.test(text)) {
+          extracted.valuta = code;
+          document.getElementById('valuta').value = code;
+          break;
+        }
+      }
+      
+      // Company names (look for common suffixes)
+      const companyPattern = /([A-ZÆØÅa-zæøå0-9\s&\-\.]+(?:AS|A\/S|AB|ApS|GmbH|Ltd|Inc|AG|SA|BV|NV|LLC|Co\.|KG|OHG|e\.K\.))/g;
+      const companies = [];
+      let compMatch;
+      while ((compMatch = companyPattern.exec(text)) !== null) {
+        companies.push(compMatch[1].trim());
+      }
+      
+      if (companies.length >= 1) {
+        extracted.avsender = companies[0];
+        document.getElementById('avsender').value = companies[0];
+        document.getElementById('avsender').classList.add('filled');
+      }
+      
+      // Country detection from text
+      const countryMap = {
+        'DE': /germany|deutschland|tysk|german|berlin|munich|hamburg/i,
+        'CN': /china|kina|chinese|beijing|shanghai|shenzhen/i,
+        'SE': /sweden|sverige|swedish|stockholm|göteborg/i,
+        'GB': /united kingdom|uk|britain|england|british|london/i,
+        'US': /usa|united states|america|american/i,
+        'NL': /netherlands|holland|dutch|amsterdam|rotterdam/i,
+        'DK': /denmark|danmark|danish|copenhagen|københavn/i,
+        'PL': /poland|polska|polish|warsaw|warszawa/i,
+        'FR': /france|french|paris|lyon/i,
+        'IT': /italy|italia|italian|rome|roma|milan/i
+      };
+      
+      for (const [code, pattern] of Object.entries(countryMap)) {
+        if (pattern.test(text)) {
+          extracted.avsenderland = code;
+          document.getElementById('avsenderland').value = code;
+          document.getElementById('avsenderland').classList.add('filled');
+          break;
+        }
+      }
+      
+      // Incoterms
+      const incotermsPattern = /\b(EXW|FCA|CPT|CIP|DAP|DPU|DDP|FAS|FOB|CFR|CIF)\b/i;
+      const incoMatch = text.match(incotermsPattern);
+      if (incoMatch) {
+        extracted.incoterms = incoMatch[1].toUpperCase();
+        document.getElementById('incoterms').value = extracted.incoterms;
+        document.getElementById('incoterms').classList.add('filled');
+      }
+      
+      // Weight patterns
+      const weightPattern = /(\d+[.,]?\d*)\s*(?:kg|kilo|kilogram)/gi;
+      let weights = [];
+      let wMatch;
+      while ((wMatch = weightPattern.exec(text)) !== null) {
+        weights.push(parseFloat(wMatch[1].replace(',', '.')));
+      }
+      if (weights.length > 0) {
+        extracted.bruttovekt = Math.max(...weights);
+        document.getElementById('vare0_bruttovekt').value = extracted.bruttovekt;
+      }
+      
+      // HS code patterns
+      const hsPattern = /\b(\d{4})[.\s]?(\d{2})[.\s]?(\d{2,4})?\b/g;
+      let hsMatch;
+      while ((hsMatch = hsPattern.exec(text)) !== null) {
+        const hsCode = hsMatch[1] + '.' + hsMatch[2] + (hsMatch[3] ? '.' + hsMatch[3] : '');
+        if (hsMatch[1] !== '2024' && hsMatch[1] !== '2023') { // Exclude years
+          extracted.varenummer = hsCode;
+          document.getElementById('vare0_varenummer').value = hsCode;
+          break;
+        }
+      }
+      
+      // Display extracted data
+      const extractedData = document.getElementById('extractedData');
+      if (Object.keys(extracted).length > 0) {
+        const labels = {
+          fakturanummer: 'Fakturanr',
+          fakturadato: 'Dato',
+          fakturabelop: 'Beløp',
+          valuta: 'Valuta',
+          avsender: 'Avsender',
+          avsenderland: 'Land',
+          incoterms: 'Incoterms',
+          bruttovekt: 'Vekt (kg)',
+          varenummer: 'Varenummer'
+        };
+        
+        for (const [key, value] of Object.entries(extracted)) {
+          const div = document.createElement('div');
+          div.className = 'extracted-item';
+          div.innerHTML = `<span>${labels[key] || key}:</span><span>${value}</span>`;
+          extractedItems.appendChild(div);
+        }
+        extractedData.classList.add('active');
+      }
+      
+      updateExport();
+    }
+    
     function loadDemoData() {
-      // Fill with demo data
       document.getElementById('kategori').value = 'IM-A';
       document.getElementById('antallKolli').value = '5';
       document.getElementById('avsender').value = 'Schmidt Electronics GmbH';
@@ -636,25 +1079,25 @@
       document.getElementById('valuta').value = 'EUR';
       document.getElementById('incoterms').value = 'DAP';
       document.getElementById('transportmate').value = '3';
+      document.getElementById('grensested').value = 'NO0201';
       document.getElementById('fakturanummer').value = 'INV-2024-001234';
       document.getElementById('fakturadato').value = '2024-11-20';
       
-      // Varelinje
       document.getElementById('vare0_beskrivelse').value = 'Elektroniske komponenter';
-      document.getElementById('vare0_varenummer').value = '8542.31.0000';
+      document.getElementById('vare0_varenummer').value = '8542.31.00';
       document.getElementById('vare0_opprinnelse').value = 'DE';
       document.getElementById('vare0_bruttovekt').value = '125';
       document.getElementById('vare0_nettovekt').value = '100';
       document.getElementById('vare0_pris').value = '15000';
       
-      // Mark as filled
       document.querySelectorAll('.form-input, .form-select').forEach(el => {
         if (el.value) el.classList.add('filled');
       });
       
-      document.getElementById('welcomeAlert').innerHTML = '✅ <strong>Demodata lastet!</strong> Gå til "Eksport" for å se TVINN-formatet.';
+      document.getElementById('welcomeAlert').innerHTML = '✅ <strong>Demodata lastet!</strong> Gå til "Eksport" for å se EDIFACT/TVINN-formatet.';
       document.getElementById('welcomeAlert').className = 'alert alert-success';
       
+      updateSummary();
       updateExport();
     }
     
@@ -664,6 +1107,7 @@
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       event.target.classList.add('active');
       if (name === 'eksport') updateExport();
+      if (name === 'varer') updateSummary();
     }
     
     function selectFormat(format) {
@@ -677,41 +1121,70 @@
       const tbody = document.getElementById('varelinjerBody');
       const idx = varelinjeCount++;
       const tr = document.createElement('tr');
+      tr.dataset.index = idx;
       tr.innerHTML = `
         <td>${idx + 1}</td>
-        <td><input type="text" id="vare${idx}_beskrivelse" /></td>
-        <td><input type="text" id="vare${idx}_varenummer" style="width:100px" /></td>
-        <td><input type="text" id="vare${idx}_opprinnelse" maxlength="2" style="width:45px" /></td>
-        <td><input type="number" step="0.01" id="vare${idx}_bruttovekt" style="width:65px" /></td>
-        <td><input type="number" step="0.01" id="vare${idx}_nettovekt" style="width:65px" /></td>
-        <td><input type="number" step="0.01" id="vare${idx}_pris" style="width:75px" /></td>
-        <td><select id="vare${idx}_prosedyre" style="width:60px"><option value="40">40</option><option value="41">41</option><option value="49">49</option></select></td>
+        <td><input type="text" id="vare${idx}_beskrivelse" placeholder="Varebeskrivelse" /></td>
+        <td><input type="text" id="vare${idx}_varenummer" placeholder="8542.31.00" /></td>
+        <td><input type="text" id="vare${idx}_opprinnelse" maxlength="2" placeholder="DE" /></td>
+        <td><input type="number" step="0.01" id="vare${idx}_bruttovekt" placeholder="0.00" /></td>
+        <td><input type="number" step="0.01" id="vare${idx}_nettovekt" placeholder="0.00" /></td>
+        <td><input type="number" step="0.01" id="vare${idx}_pris" placeholder="0.00" /></td>
+        <td>
+          <select id="vare${idx}_prosedyre">
+            <option value="40">40</option>
+            <option value="41">41</option>
+            <option value="42">42</option>
+            <option value="49">49</option>
+          </select>
+        </td>
+        <td><button class="btn btn-sm btn-danger" onclick="removeVarelinje(${idx})">✕</button></td>
       `;
       tbody.appendChild(tr);
     }
     
+    function removeVarelinje(idx) {
+      const row = document.querySelector(`tr[data-index="${idx}"]`);
+      if (row && document.querySelectorAll('#varelinjerBody tr').length > 1) {
+        row.remove();
+        updateSummary();
+      }
+    }
+    
+    function updateSummary() {
+      let sumBrutto = 0, sumNetto = 0, sumPris = 0;
+      document.querySelectorAll('#varelinjerBody tr').forEach(row => {
+        const idx = row.dataset.index;
+        sumBrutto += parseFloat(document.getElementById(`vare${idx}_bruttovekt`)?.value) || 0;
+        sumNetto += parseFloat(document.getElementById(`vare${idx}_nettovekt`)?.value) || 0;
+        sumPris += parseFloat(document.getElementById(`vare${idx}_pris`)?.value) || 0;
+      });
+      document.getElementById('sumBrutto').textContent = sumBrutto.toFixed(2);
+      document.getElementById('sumNetto').textContent = sumNetto.toFixed(2);
+      document.getElementById('sumPris').textContent = sumPris.toFixed(2);
+    }
+    
     function getFormData() {
       const varelinjer = [];
-      for (let i = 0; i < varelinjeCount; i++) {
-        const el = document.getElementById(`vare${i}_beskrivelse`);
-        if (el) {
-          varelinjer.push({
-            beskrivelse: el.value || '',
-            varenummer: document.getElementById(`vare${i}_varenummer`)?.value || '',
-            opprinnelse: document.getElementById(`vare${i}_opprinnelse`)?.value || '',
-            bruttovekt: document.getElementById(`vare${i}_bruttovekt`)?.value || '',
-            nettovekt: document.getElementById(`vare${i}_nettovekt`)?.value || '',
-            pris: document.getElementById(`vare${i}_pris`)?.value || '',
-            prosedyre: document.getElementById(`vare${i}_prosedyre`)?.value || '40'
-          });
-        }
-      }
+      document.querySelectorAll('#varelinjerBody tr').forEach(row => {
+        const idx = row.dataset.index;
+        varelinjer.push({
+          beskrivelse: document.getElementById(`vare${idx}_beskrivelse`)?.value || '',
+          varenummer: document.getElementById(`vare${idx}_varenummer`)?.value || '',
+          opprinnelse: document.getElementById(`vare${idx}_opprinnelse`)?.value || '',
+          bruttovekt: document.getElementById(`vare${idx}_bruttovekt`)?.value || '',
+          nettovekt: document.getElementById(`vare${idx}_nettovekt`)?.value || '',
+          pris: document.getElementById(`vare${idx}_pris`)?.value || '',
+          prosedyre: document.getElementById(`vare${idx}_prosedyre`)?.value || '40'
+        });
+      });
       
       return {
         kategori: document.getElementById('kategori').value,
         ekspedisjonsenhet: document.getElementById('ekspedisjonsenhet').value,
         deklarasjonsdato: document.getElementById('deklarasjonsdato').value,
         antallKolli: document.getElementById('antallKolli').value,
+        godsnummer: document.getElementById('godsnummer').value,
         avsender: document.getElementById('avsender').value,
         avsenderland: document.getElementById('avsenderland').value,
         mottaker: document.getElementById('mottaker').value,
@@ -720,10 +1193,13 @@
         tollrepOrgnr: document.getElementById('tollrepOrgnr').value,
         fakturabelop: document.getElementById('fakturabelop').value,
         valuta: document.getElementById('valuta').value,
+        statistiskVerdi: document.getElementById('statistiskVerdi').value,
         incoterms: document.getElementById('incoterms').value,
         transportmate: document.getElementById('transportmate').value,
+        grensested: document.getElementById('grensested').value,
         fakturanummer: document.getElementById('fakturanummer').value,
         fakturadato: document.getElementById('fakturadato').value,
+        transportdok: document.getElementById('transportdok').value,
         varelinjer
       };
     }
@@ -738,23 +1214,33 @@
       lines.push(`UNA:+.? '`);
       lines.push(`UNB+UNOC:3+${d.tollrepOrgnr || 'SENDER'}:ZZZ+TOLLETATEN:ZZZ+${date}:${time}+${ref}'`);
       lines.push(`UNH+1+CUSDEC:D:96B:UN:TOLL01'`);
-      lines.push(`BGM+929+${ref}+9'`);
+      
+      // BGM - 929 for import, 830 for export
+      const bgmCode = d.kategori?.startsWith('EX') ? '830' : '929';
+      lines.push(`BGM+${bgmCode}+${ref}+9'`);
+      
       lines.push(`DTM+137:${date}:102'`);
       lines.push(`LOC+22+${d.ekspedisjonsenhet || '441002'}'`);
       
       if (d.varelinjer[0]?.prosedyre) lines.push(`GEI+ABB+${d.varelinjer[0].prosedyre}'`);
       if (d.antallKolli) lines.push(`PAC+${d.antallKolli}'`);
       if (d.transportmate) lines.push(`TDT+20++++${d.transportmate}'`);
-      if (d.avsender) lines.push(`NAD+EX+++${d.avsender}++++${d.avsenderland || ''}'`);
-      if (d.mottaker) lines.push(`NAD+IM+${d.mottakerOrgnr || ''}:160++${d.mottaker}++++NO'`);
-      if (d.tollrepresentant) lines.push(`NAD+AG+${d.tollrepOrgnr || ''}:160++${d.tollrepresentant}++++NO'`);
+      if (d.grensested) lines.push(`LOC+92+${d.grensested}'`);
+      if (d.avsender) lines.push(`NAD+EX+++${d.avsender.substring(0,35)}++++${d.avsenderland || ''}'`);
+      if (d.mottaker) lines.push(`NAD+IM+${d.mottakerOrgnr || ''}:160++${d.mottaker.substring(0,35)}++++NO'`);
+      if (d.tollrepresentant) lines.push(`NAD+AG+${d.tollrepOrgnr || ''}:160++${d.tollrepresentant.substring(0,35)}++++NO'`);
       if (d.incoterms) lines.push(`TOD+6++${d.incoterms}'`);
+      
       if (d.fakturanummer) {
         lines.push(`RFF+IV:${d.fakturanummer}'`);
         if (d.fakturadato) lines.push(`DTM+171:${d.fakturadato.replace(/-/g,'')}:102'`);
       }
-      if (d.fakturabelop) lines.push(`MOA+79:${d.fakturabelop}:${d.valuta || 'EUR'}'`);
+      if (d.transportdok) lines.push(`RFF+AAC:${d.transportdok}'`);
       
+      if (d.fakturabelop) lines.push(`MOA+79:${d.fakturabelop}:${d.valuta || 'EUR'}'`);
+      if (d.statistiskVerdi) lines.push(`MOA+89:${d.statistiskVerdi}:NOK'`);
+      
+      // Line items
       d.varelinjer.forEach((v, i) => {
         if (v.beskrivelse || v.varenummer) {
           lines.push(`LIN+${i+1}'`);
@@ -768,7 +1254,8 @@
         }
       });
       
-      lines.push(`CNT+2:${d.varelinjer.filter(v => v.beskrivelse || v.varenummer).length || 1}'`);
+      const itemCount = d.varelinjer.filter(v => v.beskrivelse || v.varenummer).length || 1;
+      lines.push(`CNT+2:${itemCount}'`);
       lines.push(`UNT+${lines.length}+1'`);
       lines.push(`UNZ+1+${ref}'`);
       
@@ -781,47 +1268,104 @@
           type: d.kategori,
           dato: d.deklarasjonsdato,
           ekspedisjonsenhet: d.ekspedisjonsenhet,
-          avsender: { navn: d.avsender, land: d.avsenderland },
-          mottaker: { navn: d.mottaker, orgnr: d.mottakerOrgnr },
-          tollrepresentant: { navn: d.tollrepresentant, orgnr: d.tollrepOrgnr },
-          verdi: { belop: d.fakturabelop, valuta: d.valuta },
+          godsnummer: d.godsnummer,
+          antallKolli: d.antallKolli
+        },
+        avsender: { 
+          navn: d.avsender, 
+          land: d.avsenderland 
+        },
+        mottaker: { 
+          navn: d.mottaker, 
+          orgnr: d.mottakerOrgnr 
+        },
+        tollrepresentant: { 
+          navn: d.tollrepresentant, 
+          orgnr: d.tollrepOrgnr 
+        },
+        verdi: { 
+          belop: d.fakturabelop, 
+          valuta: d.valuta,
+          statistiskVerdi: d.statistiskVerdi
+        },
+        levering: {
           incoterms: d.incoterms,
           transportmate: d.transportmate,
-          faktura: { nummer: d.fakturanummer, dato: d.fakturadato },
-          varelinjer: d.varelinjer.filter(v => v.beskrivelse || v.varenummer)
-        }
+          grensested: d.grensested
+        },
+        dokumenter: {
+          fakturanummer: d.fakturanummer, 
+          fakturadato: d.fakturadato,
+          transportdokument: d.transportdok
+        },
+        varelinjer: d.varelinjer.filter(v => v.beskrivelse || v.varenummer)
       }, null, 2);
     }
     
     function generateCSV(d) {
-      const header = '#;Beskrivelse;Varenummer;Opprinnelse;Bruttovekt;Nettovekt;Pris;Prosedyre';
+      const header = 'Linje;Beskrivelse;Varenummer;Opprinnelse;Bruttovekt;Nettovekt;Pris;Prosedyre';
       const rows = d.varelinjer.filter(v => v.beskrivelse || v.varenummer)
         .map((v, i) => `${i+1};"${v.beskrivelse}";${v.varenummer};${v.opprinnelse};${v.bruttovekt};${v.nettovekt};${v.pris};${v.prosedyre}`);
-      return [header, ...rows].join('\n');
+      
+      const header2 = '\n\n# Hodedata';
+      const meta = `Deklarasjonstype;${d.kategori}\nAvsender;${d.avsender}\nMottaker;${d.mottaker}\nFakturabeløp;${d.fakturabelop} ${d.valuta}`;
+      
+      return [header, ...rows, header2, meta].join('\n');
     }
     
     function generateXML(d) {
       return `<?xml version="1.0" encoding="UTF-8"?>
 <Declaration xmlns="urn:wco:datamodel:WCO:DEC-DMS:2">
+  <FunctionCode>9</FunctionCode>
   <TypeCode>${d.kategori?.split('-')[0] || 'IM'}</TypeCode>
-  <DeclarationOfficeID>${d.ekspedisjonsenhet}</DeclarationOfficeID>
-  <IssueDateTime>${d.deklarasjonsdato}</IssueDateTime>
+  <GoodsItemQuantity>${d.varelinjer.filter(v => v.beskrivelse || v.varenummer).length || 1}</GoodsItemQuantity>
+  <DeclarationOfficeID>${d.ekspedisjonsenhet || '441002'}</DeclarationOfficeID>
+  <IssueDateTime>${d.deklarasjonsdato || ''}</IssueDateTime>
   <Consignor>
     <Name>${d.avsender || ''}</Name>
-    <Address><CountryCode>${d.avsenderland || ''}</CountryCode></Address>
+    <Address>
+      <CountryCode>${d.avsenderland || ''}</CountryCode>
+    </Address>
   </Consignor>
   <Consignee>
     <Name>${d.mottaker || ''}</Name>
     <ID>${d.mottakerOrgnr || ''}</ID>
+    <Address>
+      <CountryCode>NO</CountryCode>
+    </Address>
   </Consignee>
-  <InvoiceAmount currencyID="${d.valuta}">${d.fakturabelop || ''}</InvoiceAmount>
+  <Agent>
+    <Name>${d.tollrepresentant || ''}</Name>
+    <ID>${d.tollrepOrgnr || ''}</ID>
+  </Agent>
+  <InvoiceAmount currencyID="${d.valuta || 'EUR'}">${d.fakturabelop || ''}</InvoiceAmount>
+  <TotalGrossMassMeasure unitCode="KGM">${d.varelinjer.reduce((sum, v) => sum + (parseFloat(v.bruttovekt) || 0), 0)}</TotalGrossMassMeasure>
+  <DeliveryTerms>
+    <ConditionCode>${d.incoterms || ''}</ConditionCode>
+  </DeliveryTerms>
+  <BorderTransportMeans>
+    <ModeCode>${d.transportmate || ''}</ModeCode>
+  </BorderTransportMeans>
   <GoodsShipment>
 ${d.varelinjer.filter(v => v.beskrivelse || v.varenummer).map((v, i) => `    <GovernmentAgencyGoodsItem>
-      <SequenceNumeric>${i+1}</SequenceNumeric>
-      <Description>${v.beskrivelse}</Description>
-      <Classification><ID>${v.varenummer?.replace(/\./g,'')}</ID></Classification>
-      <Origin><CountryCode>${v.opprinnelse}</CountryCode></Origin>
-      <GrossMassMeasure>${v.bruttovekt}</GrossMassMeasure>
+      <SequenceNumeric>${i + 1}</SequenceNumeric>
+      <Commodity>
+        <Description>${v.beskrivelse || ''}</Description>
+        <Classification>
+          <ID>${v.varenummer?.replace(/\./g, '') || ''}</ID>
+          <IdentificationTypeCode>TSP</IdentificationTypeCode>
+        </Classification>
+      </Commodity>
+      <GoodsMeasure>
+        <GrossMassMeasure unitCode="KGM">${v.bruttovekt || ''}</GrossMassMeasure>
+        <NetNetWeightMeasure unitCode="KGM">${v.nettovekt || ''}</NetNetWeightMeasure>
+      </GoodsMeasure>
+      <Origin>
+        <CountryCode>${v.opprinnelse || ''}</CountryCode>
+      </Origin>
+      <GovernmentProcedure>
+        <CurrentCode>${v.prosedyre || '40'}</CurrentCode>
+      </GovernmentProcedure>
     </GovernmentAgencyGoodsItem>`).join('\n')}
   </GoodsShipment>
 </Declaration>`;
@@ -841,25 +1385,46 @@ ${d.varelinjer.filter(v => v.beskrivelse || v.varenummer).map((v, i) => `    <Go
     
     function copyExport() {
       navigator.clipboard.writeText(document.getElementById('exportPreview').textContent)
-        .then(() => alert('Kopiert!'));
+        .then(() => alert('✅ Kopiert til utklippstavle!'));
     }
     
     function downloadExport() {
       const content = document.getElementById('exportPreview').textContent;
       const ext = { edifact: 'edi', json: 'json', csv: 'csv', xml: 'xml' }[currentFormat];
-      const blob = new Blob([content], { type: 'text/plain' });
+      const mimeTypes = { edifact: 'text/plain', json: 'application/json', csv: 'text/csv', xml: 'application/xml' };
+      const blob = new Blob([content], { type: mimeTypes[currentFormat] + ';charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `tolldeklarasjon.${ext}`;
+      a.download = `tolldeklarasjon-${new Date().toISOString().slice(0,10)}.${ext}`;
       a.click();
     }
     
     function sendToTVINN() {
-      alert('For å sende til TVINN trenger du:\n\n1. NODI-nummer fra Norstella\n2. TVINN-tillatelse fra Tolletaten\n3. Godkjent programvare\n\nKontakt: toll.no/bedrift/tvinn');
+      alert(
+        '🚀 Send til TVINN\n\n' +
+        'For produksjonsbruk trenger du:\n\n' +
+        '1. NODI-nummer fra Norstella (1 995 kr/år)\n' +
+        '2. TVINN-tillatelse fra Tolletaten\n' +
+        '3. Godkjent programvare etter testperiode\n' +
+        '4. Kommunikasjon via Tietoevry\n\n' +
+        'Mer info: toll.no/bedrift/tvinn'
+      );
     }
     
-    // Update on input
-    document.addEventListener('input', updateExport);
+    // Auto-update on input
+    document.addEventListener('input', (e) => {
+      if (e.target.matches('input, select')) {
+        if (e.target.value) {
+          e.target.classList.add('filled');
+        } else {
+          e.target.classList.remove('filled');
+        }
+        updateExport();
+        if (e.target.id?.startsWith('vare')) {
+          updateSummary();
+        }
+      }
+    });
   </script>
 </body>
 </html>
